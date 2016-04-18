@@ -2,5 +2,8 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="C:/Users/xzhu/Documents/GitHub/Jvem/opencsv-3.7.jar"/>
+	<classpathentry kind="lib" path="C:/Users/xzhu/Documents/GitHub/Jvem/commons-math3-3.6.1.jar"/>
+	<classpathentry kind="lib" path="C:/Users/xzhu/Documents/GitHub/Jvem/postgresql-9.2-1004.jdbc4.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
