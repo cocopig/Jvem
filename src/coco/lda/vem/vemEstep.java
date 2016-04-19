@@ -4,6 +4,8 @@ import java.util.Map;
 
 import org.apache.commons.math3.special.Gamma;
 
+import main.main;
+
 public class vemEstep extends vemMain{
 
 	
@@ -36,17 +38,22 @@ public class vemEstep extends vemMain{
 	 */
 	protected double runExpectation(){
 		double likelihood = 0;
+		
+		main m = new main();
+		
 		for(int d = 0; d < num_doc; d ++){
 			phi = this.initial_phi(d);
 			var_gamma = this.initial_gamma(d);
 			
 			likelihood = likelihood + this.single_doc_inference(d);
-			
+			System.out.println("#" + (d+1) + " " + m.acclist[d] + " temp like = " + this.single_doc_inference(d));
+			System.out.println("All docs likelihood = " + likelihood);
 			alpha_suff = this.single_doc_temp_alpha(alpha_suff);
 			temp_beta = this.single_doc_temp_beta(temp_beta, d);
-//			System.out.println("tempbeta: " + temp_beta[1][1]);
+			System.out.println("tempbeta: " + temp_beta[1][1]);
 		}
 		
+//		System.out.println("All docs likelihood = " + likelihood);
 		return(likelihood);
 	}
 	
@@ -94,10 +101,10 @@ public class vemEstep extends vemMain{
 					
 					//Sent-LDA, calculate phi
 					//phi = beta_sentence(multiply all word beta in this sentence) * exp(digamma - digamma(sum))
-					double beta_sentence = 1;
+					double beta_sentence = 1.0;
 					for(int w = 0; w < doc_sent_word[doc_label][i].length; w ++){
 						int w_index = vocabulary.get(doc_sent_word[doc_label][i][w]);
-						beta_sentence = beta_sentence * topic_vocab_prob[j][w_index];
+						beta_sentence = 1.0 * beta_sentence * topic_vocab_prob[j][w_index];
 					}
 					
 					//final phi[][]
@@ -121,13 +128,18 @@ public class vemEstep extends vemMain{
 			
 			//Check convergence, whether continue while() loop
 			likelihood = compute_likelihood(doc_label, phi, var_gamma);
+			if(Double.isNaN(likelihood)){
+				likelihood = likelihood_old;
+				continue;
+			}
 			converged = 1.0* Math.abs((likelihood_old - likelihood)/likelihood_old);
 			likelihood_old = likelihood;
 			
-			System.out.println("Doc: " + doc_label + " Iteration: " + var_iter + "  Converged: " + converged + " likelihood: " + likelihood);
+//			System.out.println("Doc: " + doc_label + " Iteration: " + var_iter + "  Converged: " + converged + " likelihood: " + likelihood);
 			
 		}
 		
+//		System.out.println("Doc: " + doc_label + " Iteration: " + var_iter + "  Converged: " + converged + " likelihood: " + likelihood);
 		//return the converged likelihood for one document.
 		return(likelihood);
 	}

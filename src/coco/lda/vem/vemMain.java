@@ -71,10 +71,8 @@ public class vemMain {
 		vemEstep Estep = new vemEstep(num_doc, num_topic, vocabulary, doc_sent, doc_wordcount, doc_sent_word);
 		vemMstep Mstep = new vemMstep(num_doc, num_topic, vocabulary, doc_sent, doc_wordcount, doc_sent_word);
 		
-		while(((converged < 0) || (converged > conf.EM_CONVERGED) || (ite <= 2)) && (ite <= conf.EM_MAX_ITER)){
-			ite ++;
-			likelihood = 0;
-			
+		while((converged > conf.EM_CONVERGED) && (ite <= conf.EM_MAX_ITER)){
+			ite ++;			
 			
 			//E step
 			//calculate likelihood, update alpha_suff & temp_tvp
@@ -86,14 +84,14 @@ public class vemMain {
 			//log_topic_vocab_prob will be updated in lda_mle
 			ALPHA = Mstep.update_alpha(conf.ESTIMATE_ALPHA, Estep.get_tempALPHA());
 			topic_vocab_prob = Mstep.update_beta(Estep.get_tempBETA());
-//			System.out.println(topic_vocab_prob[1][1]);
+			System.out.println(topic_vocab_prob[1][1]);
 			
 			
 			//Check convergence
 			converged = 1.0 * Math.abs((likelihood_old - likelihood) / likelihood_old);
-			if(converged < 0){
-				conf.VAR_MAX_ITER = conf.VAR_MAX_ITER * 2;
-			}
+//			if(converged < 0){
+//				conf.VAR_MAX_ITER = conf.VAR_MAX_ITER * 2;
+//			}
 			likelihood_old = likelihood;
 			System.out.println("new likelihood: " + likelihood);
 			System.out.println("-------------------- EM Iteration: " + ite + "  Converged: " + converged + " ---------------------");

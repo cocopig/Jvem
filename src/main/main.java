@@ -17,13 +17,15 @@ public class main {
 	int [][] topic_vocab;//given topic k, count times of term t. K*V
 	int [] doc_topicsum;//Sum for each row in doc_topic (actually is total number of words in this document)
 	static int [] topic_vocabsum;//Sum for each row in topic_vocab
-
+	
 	
     //Topic index on each sentence on each doc doc_topic[0][0] indicates first sentence in first doc is assigned as topic x
 	static String [][][] doc_sent_word; //Save word text for later loop.
 	
 	static Map<String, Integer> vocabulary = new HashMap<String, Integer>();
 	static int V = 0; //number of vocabularies	
+	
+	public static String[] acclist = null;
 	
 	static //Outputs
 	int [] doc_sent_num; //Save number of sentences in each doc	
@@ -45,13 +47,17 @@ public class main {
   */
  		try{
  			Statement st = conn.createStatement();
- 			ResultSet rs = st.executeQuery("SELECT COUNT(filing_number) FROM tm_risk_10k_subtitle where filing_date < '2011-01-01' ");
+ 			ResultSet rs = st.executeQuery("SELECT COUNT(filing_number) FROM tm_risk_10k_subtitle "
+ 											+ "where subtitle != '' and filing_date < '2011-01-01' "
+ 											+ "limit 100");
 
  			while(rs.next()){
  				Ndocs = rs.getInt(1);
+// 				Ndocs = 1;
  				doc_sent_num = new int [Ndocs];
  				doc_sent_word = new String [Ndocs][][];
  				doc_wordcount = new int[Ndocs];
+ 				acclist = new String[Ndocs];
  			}
  		} catch (Exception e){
  			e.printStackTrace();
@@ -59,7 +65,9 @@ public class main {
  		
  		try{
  			Statement st = conn.createStatement();
- 			ResultSet rs = st.executeQuery("SELECT * FROM tm_risk_10k_subtitle where filing_date < '2011-01-01'");
+ 			ResultSet rs = st.executeQuery("SELECT * FROM tm_risk_10k_subtitle "
+ 											+ "where subtitle != '' and filing_date < '2011-01-01' ");
+// 											+ "and filing_number = '0001193125-10-161874'");
 
 			/**
 			 * Step 1: Read each line and:
@@ -69,7 +77,8 @@ public class main {
  			int doc_count = 0;
  			while (rs.next()){			
  				
- 				String temp_cleanvalue = rs.getString(7);
+ 				acclist[doc_count] = rs.getString("filing_number");
+ 				String temp_cleanvalue = rs.getString("subtitle");
  				temp_cleanvalue = CleanData(temp_cleanvalue);
  				
  				//save sentence into temp_sentences array

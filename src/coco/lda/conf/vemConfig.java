@@ -10,7 +10,7 @@ public class vemConfig {
 	
 	//initial iteration and convergence settings
 	public int VAR_MAX_ITER = 20;
-	public double VAR_CONVERGED = 0.000001;
+	public double VAR_CONVERGED = 0.00001;
 	public int EM_MAX_ITER = 100;
 	public double EM_CONVERGED = 0.0001;
 	
