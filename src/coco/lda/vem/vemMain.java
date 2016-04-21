@@ -84,7 +84,7 @@ public class vemMain {
 			//log_topic_vocab_prob will be updated in lda_mle
 			ALPHA = Mstep.update_alpha(conf.ESTIMATE_ALPHA, Estep.get_tempALPHA());
 			topic_vocab_prob = Mstep.update_beta(Estep.get_tempBETA());
-			System.out.println(topic_vocab_prob[1][1]);
+//			System.out.println(topic_vocab_prob[1][1]);
 			
 			
 			//Check convergence

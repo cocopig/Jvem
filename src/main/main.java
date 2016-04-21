@@ -131,7 +131,7 @@ public class main {
 		System.out.println("Run EM");
 		ldavem.run_em();
 		System.out.println("Finish EM, Start save beta");
-		ldavem.get_beta("C:/Users/xzhu/Documents/vem_topic_term.csv");
+		ldavem.get_beta("C:/Users/xzhu/Documents/vem_topic_term_0420.csv");
 		
 		
  		long Tend = (System.currentTimeMillis()/1000 - Tstart);

@@ -46,11 +46,11 @@ public class vemEstep extends vemMain{
 			var_gamma = this.initial_gamma(d);
 			
 			likelihood = likelihood + this.single_doc_inference(d);
-			System.out.println("#" + (d+1) + " " + m.acclist[d] + " temp like = " + this.single_doc_inference(d));
-			System.out.println("All docs likelihood = " + likelihood);
+//			System.out.println("#" + (d+1) + " " + m.acclist[d] + " temp like = " + this.single_doc_inference(d));
+//			System.out.println("All docs likelihood = " + likelihood);
 			alpha_suff = this.single_doc_temp_alpha(alpha_suff);
 			temp_beta = this.single_doc_temp_beta(temp_beta, d);
-			System.out.println("tempbeta: " + temp_beta[1][1]);
+//			System.out.println("tempbeta: " + temp_beta[1][1]);
 		}
 		
 //		System.out.println("All docs likelihood = " + likelihood);
