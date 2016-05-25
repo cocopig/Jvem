@@ -12,6 +12,9 @@ public class main {
 	
 	static int Ndocs;//vocabulary size, topic number, document number
 	
+	static String [] filing_number;
+	static String [] filing_date;
+	static String [] cik;
 	
 	int [][] doc_topic;//given document m, count times of topic k. M*K
 	int [][] topic_vocab;//given topic k, count times of term t. K*V
@@ -24,9 +27,7 @@ public class main {
 	
 	static Map<String, Integer> vocabulary = new HashMap<String, Integer>();
 	static int V = 0; //number of vocabularies	
-	
-	public static String[] acclist = null;
-	
+		
 	static //Outputs
 	int [] doc_sent_num; //Save number of sentences in each doc	
 	static int[] doc_wordcount; //number of words in each doc
@@ -57,7 +58,10 @@ public class main {
  				doc_sent_num = new int [Ndocs];
  				doc_sent_word = new String [Ndocs][][];
  				doc_wordcount = new int[Ndocs];
- 				acclist = new String[Ndocs];
+ 				
+ 				filing_number = new String [Ndocs];
+ 				filing_date = new String [Ndocs];
+ 				cik = new String [Ndocs];
  			}
  		} catch (Exception e){
  			e.printStackTrace();
@@ -77,7 +81,10 @@ public class main {
  			int doc_count = 0;
  			while (rs.next()){			
  				
- 				acclist[doc_count] = rs.getString("filing_number");
+ 				filing_number[doc_count] = rs.getString("filing_number");
+ 				filing_date[doc_count] = rs.getString("filing_date");
+ 				cik[doc_count] = rs.getString("cik");
+ 				
  				String temp_cleanvalue = rs.getString("subtitle");
  				temp_cleanvalue = CleanData(temp_cleanvalue);
  				
@@ -131,8 +138,10 @@ public class main {
 		System.out.println("Run EM");
 		ldavem.run_em();
 		System.out.println("Finish EM, Start save beta");
-		ldavem.get_beta("C:/Users/xzhu/Documents/vem_topic_term_0420.csv");
 		
+		ldavem.get_beta("C:/Users/xzhu/Documents/vem_topic_term_0504_30t.csv");
+		ldavem.get_document_topic("C:/Users/xzhu/Documents/vem_doc_topic_0504_30t.csv", 
+									filing_number, filing_date, cik, doc_wordcount);
 		
  		long Tend = (System.currentTimeMillis()/1000 - Tstart);
  		System.out.println("Done in " + Tend + " seconds");

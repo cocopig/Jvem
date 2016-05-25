@@ -3,6 +3,7 @@ package coco.lda.vem;
 import java.io.FileWriter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import com.opencsv.CSVWriter;
 
@@ -22,6 +23,7 @@ public class vemMain {
 	protected static double[] topic_vocab_prob_sum;
 	
 	protected static double ALPHA;
+	protected static double [][] final_gamma;
 	
 	vemConfig conf = new vemConfig();
 	
@@ -38,23 +40,28 @@ public class vemMain {
 		doc_wordcount = wordcount;
 		doc_sent_word = dsw;
 		
-		//Initial beta matrix
+		//Initial beta matrix and gamma matrix
 		topic_vocab_prob = new double[num_topic][num_vocab];
 		topic_vocab_prob_sum = new double[num_topic];
-		
+		final_gamma = new double[num_doc][num_topic];
+		Random r = new Random();
+		r.setSeed(4);
 		for(int i = 0; i < num_topic; i ++){
 			topic_vocab_prob_sum[i] = 0;
 			for(int j = 0; j < num_vocab; j ++){
-				topic_vocab_prob[i][j] = 1/num_vocab + Math.random();
+				topic_vocab_prob[i][j] = 1/num_vocab + r.nextDouble();
+//				topic_vocab_prob[i][j] = 1/num_vocab;
 				topic_vocab_prob_sum[i] = topic_vocab_prob_sum[i] + topic_vocab_prob[i][j];
 			}
 			for(int j = 0; j < num_vocab; j ++){
 				topic_vocab_prob[i][j] = 1.0 * topic_vocab_prob[i][j]/topic_vocab_prob_sum[i];
 			}
+			for(int j = 0; j < num_doc; j ++){
+				final_gamma[j][i] = 0;
+			}
 		}		
 		
 		ALPHA = conf.INITIAL_ALPHA;
-				
 	}
 	
 
@@ -85,7 +92,7 @@ public class vemMain {
 			ALPHA = Mstep.update_alpha(conf.ESTIMATE_ALPHA, Estep.get_tempALPHA());
 			topic_vocab_prob = Mstep.update_beta(Estep.get_tempBETA());
 //			System.out.println(topic_vocab_prob[1][1]);
-			
+			final_gamma = Mstep.update_gamma(Estep.get_tempGAMMA(), conf.GAMMA_THRE);
 			
 			//Check convergence
 			converged = 1.0 * Math.abs((likelihood_old - likelihood) / likelihood_old);
@@ -128,12 +135,49 @@ public class vemMain {
 			
 		} catch(Exception e){
 			e.printStackTrace();
-		}
-		
+		}		
+
 	}
 	
 	
-
+	public void get_document_topic(String file_path, String[] fnumber, String[] fdate, String[] cik, int[] wc){
+		
+		CSVWriter writer;
+		try {
+			writer = new CSVWriter(new FileWriter(file_path));
+			String[] title = new String[num_topic + 4];
+			title[0] = "FilingNumber";
+			title[1] = "FilingDate";
+			title[2] = "cik";
+			title[3] = "WordCount";
+			
+			for(int i = 0; i < num_topic; i ++){
+				title[i+4] = String.valueOf("Topic" + i);
+			}
+			writer.flush();
+			writer.writeNext(title);
+			writer.flush();
+			
+			for(int j = 0; j < num_doc; j ++){
+				String[] csvinput = new String[num_topic + 4];
+				csvinput[0] = String.valueOf(fnumber[j]);
+				csvinput[1] = String.valueOf(fdate[j]);
+				csvinput[2] = String.valueOf(cik[j]);
+				csvinput[3] = String.valueOf(wc[j]);
+				
+				for(int i = 0; i < num_topic; i ++){
+					csvinput[i+4] = String.valueOf(final_gamma[j][i]);
+				}
+				writer.flush();
+				writer.writeNext(csvinput);
+				writer.flush();
+			}
+			
+		} catch(Exception e){
+			e.printStackTrace();
+		}	
+		
+	}
 	
 	
 	

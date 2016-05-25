@@ -21,6 +21,34 @@ public class vemMstep extends vemMain{
 		return(new_alpha);
 	}
 	
+	
+	protected double[][] update_gamma(double[][] gamma, double gamma_thre){
+		double[][] temp = new double[num_doc][num_topic];
+		
+		for(int i = 0; i < num_doc; i ++){
+			double sum_temp = 0;
+			for(int j = 0; j < num_topic; j ++){
+				sum_temp = sum_temp + gamma[i][j];
+			}
+//			System.out.println(gamma.length + " " + num_doc);
+			for(int j = 0; j < num_topic; j ++){
+//				System.out.println("length: " + gamma[i].length + " " + sum_temp + " " + gamma[i][j]);
+				if(sum_temp == 0){
+					temp[i][j] = 0;
+				} else {
+					temp[i][j] = 1.0 * gamma[i][j]/sum_temp;
+				}
+				
+				if(temp[i][j] < gamma_thre){
+					temp[i][j] = 0;
+				}
+			}
+		}
+
+		return(temp);
+	}
+	
+	
 	protected double[][] update_beta(double[][] temp_beta){
 		double[][] new_beta = new double[num_topic][num_vocab];
 		double[] sum = new double[num_topic];
@@ -44,7 +72,7 @@ public class vemMstep extends vemMain{
 	
 	private double opt_alpha(double alpha_suff){
 
-		double a, log_a, init_a = 100;
+		double a, log_a, init_a = conf.INITIAL_ALPHA * num_topic;
 		double f, df, d2f;
 		int iter = 0;
 		
@@ -54,8 +82,10 @@ public class vemMstep extends vemMain{
 			a = Math.exp(log_a);
 			f = num_doc * (Gamma.logGamma(a * num_topic) - num_topic * Gamma.logGamma(a))
 					+ (a - 1) * alpha_suff;
+			//alpha gradient
 			df = num_doc * (num_topic * Gamma.digamma(a * num_topic) - num_topic * Gamma.digamma(a))
 					+ alpha_suff;
+			//alpha hessian
 			d2f = num_doc * (num_topic * num_topic * Gamma.trigamma(a * num_topic) 
 					- num_topic * Gamma.trigamma(a));
 			

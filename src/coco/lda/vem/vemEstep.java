@@ -13,6 +13,7 @@ public class vemEstep extends vemMain{
 	private double[][] temp_beta;
 	private double[][] phi;
 	private double[] var_gamma;
+	private double[][] gamma;
 	
 	public vemEstep(int ndoc, int ntopic, Map<String, Integer> vocab, 
 			int[] sentence, int[] wordcount, String[][][] dsw){
@@ -20,6 +21,7 @@ public class vemEstep extends vemMain{
 		
 		alpha_suff = 0;
 		temp_beta = new double[num_topic][vocabulary.size()];
+		gamma = new double[num_doc][num_topic];
 		for(int i = 0; i < num_topic; i ++){
 			for(int j = 0; j < vocabulary.size(); j ++){
 				temp_beta[i][j] = 0;
@@ -50,6 +52,7 @@ public class vemEstep extends vemMain{
 //			System.out.println("All docs likelihood = " + likelihood);
 			alpha_suff = this.single_doc_temp_alpha(alpha_suff);
 			temp_beta = this.single_doc_temp_beta(temp_beta, d);
+			gamma[d] = var_gamma;
 //			System.out.println("tempbeta: " + temp_beta[1][1]);
 		}
 		
@@ -64,6 +67,10 @@ public class vemEstep extends vemMain{
 	
 	protected double[][] get_tempBETA(){
 		return(this.temp_beta);
+	}
+	
+	protected double[][] get_tempGAMMA(){
+		return(this.gamma);
 	}
 	
 	//function should be applied on each doc
@@ -113,7 +120,7 @@ public class vemEstep extends vemMain{
 				}		
 				
 				//Finish updating phi[][sentence] on all topics
-				//Normalize phi
+				//Normalize phi for sentence i
 				for(int j = 0; j < num_topic; j ++){
 					phi[j][i] = 1.0 * phi[j][i]/phisum;
 					phi_sent_sum[j] = phi_sent_sum[j] + phi[j][i];
@@ -143,8 +150,6 @@ public class vemEstep extends vemMain{
 		//return the converged likelihood for one document.
 		return(likelihood);
 	}
-	
-	
 	
 	
 	private double single_doc_temp_alpha(double old_alpha){
@@ -178,10 +183,7 @@ public class vemEstep extends vemMain{
 		}	
 		return(re_beta);
 	}
-	
-	
 
-	
 	
 	private double[] initial_gamma (int doc_label){
 		double[] var_gamma = new double[num_topic];
@@ -190,8 +192,6 @@ public class vemEstep extends vemMain{
 		}		
 		return(var_gamma);
 	}
-	
-	
 	
 	
 	//initial phi, var_gamma, digamma_gam for each inference
@@ -208,10 +208,8 @@ public class vemEstep extends vemMain{
 		
 		return(phi);
 	}
-	
-	
-	
-	
+
+		
 	//compute_likelihood from Blei(2003) and Bao(2014) format, adjusted for sent-LDA
 	private double compute_likelihood(int doc_label, double[][] phi, double[] var_gamma){
 		double likelihood = 0;
