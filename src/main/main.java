@@ -1,195 +1,254 @@
 package main;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Random;
 
-import coco.lda.vem.vemMain;
+import com.opencsv.CSVWriter;
+
+import coco.lda.vem.*;
+import coco.lda.conf.*;
 
 public class main {
-	
-	//Parameters
-	static int topicNum = 30;
-	
-	static int Ndocs;//vocabulary size, topic number, document number
-	
-	static String [] filing_number;
-	static String [] filing_date;
-	static String [] cik;
-	
-	int [][] doc_topic;//given document m, count times of topic k. M*K
-	int [][] topic_vocab;//given topic k, count times of term t. K*V
-	int [] doc_topicsum;//Sum for each row in doc_topic (actually is total number of words in this document)
-	static int [] topic_vocabsum;//Sum for each row in topic_vocab
-	
-	
-    //Topic index on each sentence on each doc doc_topic[0][0] indicates first sentence in first doc is assigned as topic x
-	static String [][][] doc_sent_word; //Save word text for later loop.
-	
-	static Map<String, Integer> vocabulary = new HashMap<String, Integer>();
-	static int V = 0; //number of vocabularies	
-		
-	static //Outputs
-	int [] doc_sent_num; //Save number of sentences in each doc	
-	static int[] doc_wordcount; //number of words in each doc
-		
-	public static void main(String args[]) {
 
-		//Record Start time
-		long Tstart = System.currentTimeMillis()/1000;
+	public static void main(String [ ] args){
 		
-		List<List> index = new ArrayList<List>();
+		parameters par = new parameters();
 		
-		//Initial what I can
-		topic_vocabsum = new int[topicNum];
-				
- 		Connection conn = sql_conn.sqlconn();
- /**
-  * Step 0: Get number of Documents		
-  */
- 		try{
- 			Statement st = conn.createStatement();
- 			ResultSet rs = st.executeQuery("SELECT COUNT(filing_number) FROM tm_risk_10k_subtitle "
- 											+ "where subtitle != '' and filing_date < '2011-01-01' "
- 											+ "limit 100");
-
- 			while(rs.next()){
- 				Ndocs = rs.getInt(1);
-// 				Ndocs = 1;
- 				doc_sent_num = new int [Ndocs];
- 				doc_sent_word = new String [Ndocs][][];
- 				doc_wordcount = new int[Ndocs];
- 				
- 				filing_number = new String [Ndocs];
- 				filing_date = new String [Ndocs];
- 				cik = new String [Ndocs];
- 			}
- 		} catch (Exception e){
- 			e.printStackTrace();
- 		}
- 		
- 		try{
- 			Statement st = conn.createStatement();
- 			ResultSet rs = st.executeQuery("SELECT * FROM tm_risk_10k_subtitle "
- 											+ "where subtitle != '' and filing_date < '2011-01-01' ");
-// 											+ "and filing_number = '0001193125-10-161874'");
-
-			/**
-			 * Step 1: Read each line and:
-			 * 				Save filing_number, filing_date, cik, sic into index list
-			 * 				Save vocabulary		
-			 */
- 			int doc_count = 0;
- 			while (rs.next()){			
- 				
- 				filing_number[doc_count] = rs.getString("filing_number");
- 				filing_date[doc_count] = rs.getString("filing_date");
- 				cik[doc_count] = rs.getString("cik");
- 				
- 				String temp_cleanvalue = rs.getString("subtitle");
- 				temp_cleanvalue = CleanData(temp_cleanvalue);
- 				
- 				//save sentence into temp_sentences array
- 				String[] temp_sentences = temp_cleanvalue.split(",");
- 				doc_sent_word[doc_count] = new String[temp_sentences.length][];
- 				
- 				doc_sent_num[doc_count] = temp_sentences.length;
- 				doc_wordcount[doc_count] = 0;
- 				
- 				//Loop for each sentence
- 				for(int ind1 = 0; ind1 < temp_sentences.length; ind1 ++){
- 					String[] temp_words = temp_sentences[ind1].split("_");
- 					doc_sent_word[doc_count][ind1] = new String[temp_words.length]; 					
- 					doc_wordcount[doc_count] = doc_wordcount[doc_count] + temp_words.length;
- 					
- 					//loop for each words in one sentence
- 					for(int ind2 = 0; ind2 < temp_words.length; ind2 ++){
- 						
- 						if(!vocabulary.keySet().contains(temp_words[ind2])){
- 							//Add to vocabulary
- 							vocabulary.put(temp_words[ind2], V);
- 							V ++;		
- 							doc_sent_word[doc_count][ind1][ind2] = temp_words[ind2];	
-
- 						} else {
- 							doc_sent_word[doc_count][ind1][ind2] = temp_words[ind2];
- 						}						
- 					}
- 				}
-				
- 				//Finish this document
-// 				System.out.println("Finish Document Initialization: " + doc_count);
- 				
- 				doc_count ++ ;
- 				
- 			}
- 			System.out.println("-------- Step1 Finish Document Initialization --------");
- 			System.out.println("number of vocab: " + vocabulary.size());
- 			
- 			conn.close();
- 		} catch (Exception e){
- 			e.printStackTrace();
- 		}
- 		
- 		
- 		//Run VEM and save topic_term_prob into csv file.
- 		vemMain ldavem = new vemMain(Ndocs, topicNum, vocabulary, doc_sent_num, doc_wordcount, doc_sent_word);
+		//Step 0: define parameter and initial parameters.
+		int Numdoc = 0, Numtopic = 30;
+		double ALPHA = 1.0;
+		double[][] BETA;
+		String[][][] doc_sent_word = null;
+		double[][] doc_topic = null;
+		String[][] docinfo = null;
+		HashMap<int[], double[]> sent_topic = new HashMap<int[], double[]>();
+		
+		HashMap <String, Integer> vocabulary = new HashMap <String, Integer>();
+		
+		int seed = par.seed;
+		Random generator = new Random(seed);
+		String beta_file = par.beta_file;
+		String doc_topic_file = par.doc_topic_file;
+		String sent_topic_file = par.sent_topic_file;
+		
+		vemConfig conf = new vemConfig();
 		
 		
-		System.out.println("Run EM");
-		ldavem.run_em();
-		System.out.println("Finish EM, Start save beta");
+		//Step 1: Read data and get dws, initial beta.
+		String db_addr = par.db_addr;
+		String db_user = par.db_user;
+		String db_pwd = par.db_pwd;
+		String read_table = par.read_table;
+		String wherecondition = " WHERE filing_date < '2015-01-01' and filing_date > '2014-01-01' and subtitle != ''";
 		
-		ldavem.get_beta("C:/Users/xzhu/Documents/vem_topic_term_0504_30t.csv");
-		ldavem.get_document_topic("C:/Users/xzhu/Documents/vem_doc_topic_0504_30t.csv", 
-									filing_number, filing_date, cik, doc_wordcount);
 		
- 		long Tend = (System.currentTimeMillis()/1000 - Tstart);
- 		System.out.println("Done in " + Tend + " seconds");
- 		
-	}
-	
-		
-	
-	
-	
-	private static String CleanData(String orig){
-		String[] temp_sentences = orig.split(",");
+		try{
+			Connection connt = DriverManager.getConnection(db_addr, db_user, db_pwd);
+			System.out.println("Success connecting ...");					
+			Statement st = connt.createStatement();	
 			
-		String cleaned_doc = "";
-		int firstsent = 1;
+			String select_query = "SELECT count(filing_number) as tot FROM " + read_table 
+								+ wherecondition;
+			ResultSet rst = st.executeQuery(select_query);
+			
+			while(rst.next()){
+				Numdoc = rst.getInt("tot");
+			}	
+//			Numdoc = 3;
+			doc_sent_word = new String[Numdoc][][];
+			doc_topic = new double[Numdoc][Numtopic];
+			docinfo = new String[Numdoc][5];
+			System.out.println("Step0 - Finish Reading: " + Numdoc);
+			
+			
+			select_query = "SELECT * FROM " + read_table 
+							+ wherecondition;
+			rst = st.executeQuery(select_query);
+			
+			cleanDATA clean = new cleanDATA();
+
+			int doc = 0;
+			int v = 0;
+			while(rst.next()){
+				docinfo[doc][0] = rst.getString("filing_number");
+				docinfo[doc][1] = rst.getString("filing_date");
+				docinfo[doc][2] = rst.getString("name");
+				docinfo[doc][3] = String.valueOf(rst.getInt("cik"));
+				docinfo[doc][4] = String.valueOf(rst.getInt("sic"));
+				
+				String[] temp = clean.cleanString(rst.getString("subtitle")).split(",");
+//				System.out.println(clean.cleanString(rst.getString("subtitle")));
+				doc_sent_word[doc] = new String[temp.length][];
+				
+				for(int sent = 0; sent < temp.length; sent ++){
+					doc_sent_word[doc][sent] = temp[sent].split("_");
+					for(int j = 0; j < temp[sent].split("_").length; j ++){
+						String word = doc_sent_word[doc][sent][j];		
+						if(vocabulary.containsKey(word)){
+							continue;
+						}else{
+							vocabulary.put(word, v);
+							v ++ ;
+						}
+					}
+				}			
+				doc ++;
+			}
+			connt.close();
+		}catch(Exception e){
+			e.printStackTrace();
+		}
 		
-		for(int i = 0; i < temp_sentences.length; i ++){
-			if(temp_sentences[i].isEmpty()){
-				continue;
-			} else if (firstsent == 1){
-				firstsent = 0;
-				String[] temp_words = temp_sentences[i].split("_");
-				int firstword =  1;
-				for(int j = 0; j < temp_words.length; j++){
-					if(temp_words[j].isEmpty()){
-						continue;
-					} else if (firstword == 1){
-						firstword = 0;
-						cleaned_doc = cleaned_doc + temp_words[j];
-					} else {
-						cleaned_doc = cleaned_doc + "_" + temp_words[j];
-					}
-				}
-			} else {
-				String[] temp_words = temp_sentences[i].split("_");
-				int firstword =  1;
-				for(int j = 0; j < temp_words.length; j++){
-					if(temp_words[j].isEmpty()){
-						continue;
-					} else if (firstword == 1){
-						firstword = 0;
-						cleaned_doc = cleaned_doc + "," + temp_words[j];
-					} else {
-						cleaned_doc = cleaned_doc + "_" + temp_words[j];
-					}
-				}
+		System.out.println("Step0 - Finish Reading: " + vocabulary.size());
+		
+		//Initial BETA
+		BETA = new double[Numtopic][vocabulary.size()];
+		for(int topic = 0; topic < Numtopic; topic ++){
+			double betasum = 0.0;
+			for(int word = 0; word < vocabulary.size(); word ++){
+				BETA[topic][word] = 1.0/vocabulary.size() + generator.nextDouble();
+				betasum = betasum + BETA[topic][word];
+			}
+			for(int word = 0; word < vocabulary.size(); word ++){
+				BETA[topic][word] = 1.0 * BETA[topic][word]/betasum;
 			}
 		}
-		return(cleaned_doc);
+		
+		System.out.println("Step0 - Finish initialization");
+		
+		//Step 2: Run EM
+		
+		int totite = 0;
+		double totconverged = 0;
+		double oldlikelihood = 1;
+		System.out.println("Step1 - Start EM.........................");
+		while(((totconverged < 0) || (totconverged > conf.EM_CONVERGED) || totite < 2) && totite <= conf.EM_MAX_ITER){
+			vemEstep vemE = new vemEstep(Numdoc, Numtopic, BETA, doc_sent_word, vocabulary, ALPHA);
+			vemMstep vemM = new vemMstep(Numdoc, Numtopic);
+			totite ++;
+			double likelihood = vemE.runEstep();
+			totconverged = Math.abs(likelihood - oldlikelihood)/oldlikelihood;
+			oldlikelihood = likelihood;
+			ALPHA = vemM.MstepALPHA(vemE.getsuffALPHA());
+			BETA = vemM.MstepBETA(vemE.getsuffBETA());
+			doc_topic = vemM.MstepDOCT(vemE.getGAMMA());
+			sent_topic = vemM.MstepSENTT(vemE.getPHI());
+			
+			System.out.println("Step1 - Iteration: " + totite);
+			System.out.println("       likelihood: " + oldlikelihood 
+								+ " --- converge: " + totconverged 
+								+ " --- alpha: " + ALPHA);
+		}
+		
+		
+		
+		
+		//Step 2: save beta
+		try {
+			CSVWriter writer = new CSVWriter(new FileWriter(beta_file));
+	        String[] input = new String[Numtopic + 1];
+	        //Header
+	        input[0] = "Vocab";
+			for(int topic = 0; topic < Numtopic; topic ++){
+				input[topic + 1] = "Topic" + topic;
+			}
+			
+			//Content
+			for(String key : vocabulary.keySet()){
+				input[0] = key;
+				int ind = vocabulary.get(key);
+				for(int topic = 0; topic < Numtopic; topic ++){
+					input[topic + 1] = String.valueOf(BETA[topic][ind]);
+				}
+				writer.flush();
+			    writer.writeNext(input);
+			    writer.flush();
+			}
+			
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		System.out.println("Finish writting beta.");
+		
+		try {
+			CSVWriter writer = new CSVWriter(new FileWriter(sent_topic_file));
+	        String[] input = new String[Numtopic + 5];
+	        //Header
+	        input[0] = "Acc";
+	        input[1] = "date";
+	        input[2] = "cik";
+	        
+			for(int topic = 0; topic < Numtopic; topic ++){
+				input[topic + 5] = "Topic" + topic;
+			}
+			
+			//Content
+			for(int[] key : sent_topic.keySet()){
+				input[0] = docinfo[key[0]][0];
+		        input[1] = docinfo[key[0]][1];
+		        input[2] = docinfo[key[0]][3];
+		        input[3] = String.valueOf(key[0]);
+		        input[4] = String.valueOf(key[1]);
+
+				for(int topic = 0; topic < Numtopic; topic ++){
+					input[topic + 5] = String.valueOf(sent_topic.get(key)[topic]);
+				}
+				writer.flush();
+			    writer.writeNext(input);
+			    writer.flush();
+			}
+			
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("Finish writting sent_topic.");
+
+		
+		try {
+			CSVWriter writer = new CSVWriter(new FileWriter(doc_topic_file));
+	        String[] input = new String[Numtopic + 5];
+	        //Header
+	        input[0] = "Acc";
+	        input[1] = "date";
+	        input[2] = "cik";
+	        input[3] = "doc";
+	        input[4] = "sent";
+	        
+			for(int topic = 0; topic < Numtopic; topic ++){
+				input[topic + 5] = "Topic" + topic;
+			}
+			
+			//Content
+			for(int doc = 0; doc < Numdoc; doc ++){
+				input[0] = docinfo[doc][0];
+		        input[1] = docinfo[doc][1];
+		        input[2] = docinfo[doc][2];
+		        input[3] = docinfo[doc][3];
+		        input[4] = docinfo[doc][4];
+
+				for(int topic = 0; topic < Numtopic; topic ++){
+					input[topic + 5] = String.valueOf(doc_topic[doc][topic]);
+				}
+				writer.flush();
+			    writer.writeNext(input);
+			    writer.flush();
+			}
+			
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("Finish writting doc_topic.");
+		
+				
 	}
 }

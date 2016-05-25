@@ -1,100 +1,103 @@
 package coco.lda.vem;
 
-import java.util.Map;
+import java.util.HashMap;
 
 import org.apache.commons.math3.special.Gamma;
 
-public class vemMstep extends vemMain{
+import coco.lda.conf.*;;
 
-	public vemMstep(int ndoc, int ntopic, Map<String, Integer> vocab, 
-			int[] sentence, int[] wordcount, String[][][] dsw){
-		super(num_doc, num_topic, vocabulary, doc_sent, doc_wordcount, doc_sent_word);
+public class vemMstep {
 
+	private int Ndoc, Ntopic;
+
+
+	
+	public vemMstep(int Numdoc, int Numtopic) {
+		// TODO Auto-generated constructor stub
+		Ndoc = Numdoc;
+		Ntopic = Numtopic;
 	}
-	
-	
-	protected double update_alpha(int estimate_alpha, double alpha_suff){
-		double new_alpha = 0;
-		if(estimate_alpha == 1){
-			new_alpha = opt_alpha(alpha_suff);
-		}
-		return(new_alpha);
-	}
-	
-	
-	protected double[][] update_gamma(double[][] gamma, double gamma_thre){
-		double[][] temp = new double[num_doc][num_topic];
+
+	public double MstepALPHA(double alpha_suff){
+		double newalpha = 0;
 		
-		for(int i = 0; i < num_doc; i ++){
-			double sum_temp = 0;
-			for(int j = 0; j < num_topic; j ++){
-				sum_temp = sum_temp + gamma[i][j];
-			}
-//			System.out.println(gamma.length + " " + num_doc);
-			for(int j = 0; j < num_topic; j ++){
-//				System.out.println("length: " + gamma[i].length + " " + sum_temp + " " + gamma[i][j]);
-				if(sum_temp == 0){
-					temp[i][j] = 0;
-				} else {
-					temp[i][j] = 1.0 * gamma[i][j]/sum_temp;
-				}
-				
-				if(temp[i][j] < gamma_thre){
-					temp[i][j] = 0;
-				}
-			}
-		}
-
-		return(temp);
-	}
-	
-	
-	protected double[][] update_beta(double[][] temp_beta){
-		double[][] new_beta = new double[num_topic][num_vocab];
-		double[] sum = new double[num_topic];
-		for(int i = 0; i < num_topic; i ++){
-			sum[i] = 0;
-			for(int j = 0; j < num_vocab; j ++){
-				sum[i] = sum[i] + temp_beta[i][j];
-			}
-			for(int j = 0; j < num_vocab; j ++){
-				if(temp_beta[i][j] > 0){
-					new_beta[i][j] = 1.0 * temp_beta[i][j]/sum[i];
-				} else {
-					new_beta[i][j] = -100;
-				}				
-			}			
-		}
-		
-		return(new_beta);
-	}
-	
-	
-	private double opt_alpha(double alpha_suff){
-
-		double a, log_a, init_a = conf.INITIAL_ALPHA * num_topic;
+		vemConfig conf = new vemConfig();
+		int alphaite = 0;
 		double f, df, d2f;
-		int iter = 0;
-		
-		log_a = Math.log(init_a);
+		double a, init_a = 100;
+		double log_a = Math.log(init_a);
 		do{
-			iter ++;
+			alphaite ++;
 			a = Math.exp(log_a);
-			f = num_doc * (Gamma.logGamma(a * num_topic) - num_topic * Gamma.logGamma(a))
-					+ (a - 1) * alpha_suff;
-			//alpha gradient
-			df = num_doc * (num_topic * Gamma.digamma(a * num_topic) - num_topic * Gamma.digamma(a))
-					+ alpha_suff;
-			//alpha hessian
-			d2f = num_doc * (num_topic * num_topic * Gamma.trigamma(a * num_topic) 
-					- num_topic * Gamma.trigamma(a));
-			
+			f = Ndoc * (Gamma.logGamma(Ntopic * a) - Ntopic * Gamma.logGamma(a)) + (a - 1) * alpha_suff;
+			df = Ndoc * (Ntopic * Gamma.digamma(Ntopic * a) - Ntopic * Gamma.digamma(a)) + alpha_suff;
+			d2f = Ndoc * (Ntopic * Ntopic * Gamma.trigamma(Ntopic * a) - Ntopic * Gamma.trigamma(a));
 			log_a = log_a - df/(d2f * a + df);
-			
-		}while(Math.abs(df) > conf.NEWTON_THRESH && (iter < conf.MAX_ALPHA_ITER));
+		}while((Math.abs(df) > conf.NEWTON_THRESH) && (alphaite < conf.MAX_ALPHA_ITER));
 		
-		return(Math.exp(log_a));
+		newalpha = Math.exp(log_a);
+		return(newalpha);
 	}
+	
+	public double[][] MstepBETA(double[][] suffBETA){
+		double[] beta_summ = new double[suffBETA.length];
+		
+		for(int topic = 0; topic < suffBETA.length; topic ++){		
+			beta_summ[topic] = suffBETA[topic][0];
+			for(int word = 1; word < suffBETA[0].length; word ++) {
+				beta_summ[topic] = beta_summ[topic] + suffBETA[topic][word];
+				
+			}
+		}
+	
+		double[][] newbeta = suffBETA;
+		for(int topic = 0; topic < suffBETA.length; topic ++){
+			for(int word = 0; word < suffBETA[0].length; word ++){
+				newbeta[topic][word] = 1.0 * suffBETA[topic][word]/beta_summ[topic];
+			}			
+		} 	
+		
+		return(newbeta);
+	}
+
+	public double[][] MstepDOCT(double[][] doc_gamma){
+		double[][] result = doc_gamma;
+		double[] gamma_summ = new double[doc_gamma.length];
+		
+		for(int doc = 0; doc < doc_gamma.length; doc ++){		
+			gamma_summ[doc] = doc_gamma[doc][0];
+			for(int topic = 1; topic < doc_gamma[0].length; topic ++) {
+				gamma_summ[doc] = gamma_summ[doc] + doc_gamma[doc][topic];				
+			}
+		}
+	
+		for(int doc = 0; doc < doc_gamma.length; doc ++){
+			for(int topic = 1; topic < doc_gamma[0].length; topic ++) {
+				result[doc][topic] = 1.0 * doc_gamma[doc][topic]/gamma_summ[doc];
+			}			
+		} 
+		return(result);
+	}
+	
+	public HashMap<int[], double[]> MstepSENTT(double[][][] sent_phi){
+		HashMap<int[], double[]> result = new HashMap<int[], double[]>();
+
+		for(int doc = 0; doc < sent_phi.length; doc ++){
+			for(int s = 0; s < sent_phi[doc][0].length; s ++){
+				int[] key = {doc, s};
+				double[] value = new double[Ntopic];
+				double sum = 0;
+				for(int t = 0; t < Ntopic; t ++){
+					sum = sum + sent_phi[doc][t][s];
+				}
+				for(int t = 0; t < Ntopic; t ++){
+					value[t] = 1.0 * sent_phi[doc][t][s]/sum;
+				}
+
+				result.put(key, value);
+			}
+		}
+		return(result);
+	}
+
 }
-
-

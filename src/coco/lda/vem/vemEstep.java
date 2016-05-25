@@ -1,260 +1,228 @@
 package coco.lda.vem;
 
-import java.util.Map;
+import java.util.HashMap;
 
 import org.apache.commons.math3.special.Gamma;
 
-import main.main;
+import coco.lda.conf.*;
 
-public class vemEstep extends vemMain{
+public class vemEstep {
 
+	private int Ndoc, Ntopic;
+	private String[][][] dsw;
+	private double[][] beta;
+	private double alpha;
+	private double[][] doc_gamma;
+	private double[][][] sent_phi;
+	vemConfig conf = new vemConfig();
+	HashMap <String, Integer> vocabulary;
 	
-	private double alpha_suff;
-	private double[][] temp_beta;
+	private double[][] suffBETA;
+	private double suffALPHA = 0;
 	private double[][] phi;
-	private double[] var_gamma;
-	private double[][] gamma;
-	
-	public vemEstep(int ndoc, int ntopic, Map<String, Integer> vocab, 
-			int[] sentence, int[] wordcount, String[][][] dsw){
-		super(num_doc, num_topic, vocabulary, doc_sent, doc_wordcount, doc_sent_word);
+	private double[] gamma;
 		
-		alpha_suff = 0;
-		temp_beta = new double[num_topic][vocabulary.size()];
-		gamma = new double[num_doc][num_topic];
-		for(int i = 0; i < num_topic; i ++){
-			for(int j = 0; j < vocabulary.size(); j ++){
-				temp_beta[i][j] = 0;
-			}
-		}
-	}
-
-	
-	/**
-	 * Run e step
-	 * loop for each document
-	 * update sufficient (temp_tvp and alpha_suff)
-	 * After estep, alpha and beta matrix need to be updated.
-	 * @param like
-	 * @return
-	 */
-	protected double runExpectation(){
-		double likelihood = 0;
-		
-		main m = new main();
-		
-		for(int d = 0; d < num_doc; d ++){
-			phi = this.initial_phi(d);
-			var_gamma = this.initial_gamma(d);
-			
-			likelihood = likelihood + this.single_doc_inference(d);
-//			System.out.println("#" + (d+1) + " " + m.acclist[d] + " temp like = " + this.single_doc_inference(d));
-//			System.out.println("All docs likelihood = " + likelihood);
-			alpha_suff = this.single_doc_temp_alpha(alpha_suff);
-			temp_beta = this.single_doc_temp_beta(temp_beta, d);
-			gamma[d] = var_gamma;
-//			System.out.println("tempbeta: " + temp_beta[1][1]);
-		}
-		
-//		System.out.println("All docs likelihood = " + likelihood);
-		return(likelihood);
-	}
-	
-	
-	protected double get_tempALPHA(){
-		return(this.alpha_suff);
-	}
-	
-	protected double[][] get_tempBETA(){
-		return(this.temp_beta);
-	}
-	
-	protected double[][] get_tempGAMMA(){
-		return(this.gamma);
-	}
-	
-	//function should be applied on each doc
-	private double single_doc_inference(int doc_label){
-
-		
-		//Set other parameters
-		double likelihood = 0;
-		double likelihood_old = 0;
-		double phisum = 0;
-		double converged = 1;
-		int var_iter = 0;
-		int num_sentence = phi[0].length;
-		
-		while((converged > conf.VAR_CONVERGED) && ((var_iter < conf.VAR_MAX_ITER) || (conf.VAR_MAX_ITER == -1))){
-			var_iter ++;
-			
-			double[] phi_sent_sum = new double[num_topic];
-			
-			double digamma_sum = 0;
-			double[] digamma = new double[num_topic];
-			for(int i = 0; i < num_topic; i ++){
-				digamma_sum = digamma_sum + var_gamma[i];
-				digamma[i] = Gamma.digamma(var_gamma[i]);
-				phi_sent_sum[i] = 0;
-			}
-			digamma_sum = Gamma.digamma(digamma_sum);
-		
-			//Update phi for each sentence, each topic
-			for(int i = 0; i < num_sentence; i++){
-				phisum = 0;	//used to normalize phi	
+	public vemEstep(int Numdoc, 
+					int Numtopic, 
+					double[][] probwt, 
+					String[][][] doc_sent_word, 
+					HashMap <String, Integer> vocab,
+					double oldalpha){
+		Ndoc = Numdoc;
+		Ntopic = Numtopic;
+		dsw = doc_sent_word;
+		beta = probwt;
+		alpha = oldalpha;
+		vocabulary = vocab;
+		doc_gamma = new double[Ndoc][Ntopic];
+		sent_phi = new double[Ndoc][][];
 				
-				//Update phi[topic][sentence]
-				for(int j = 0; j < num_topic; j ++){				
-					
-					//Sent-LDA, calculate phi
-					//phi = beta_sentence(multiply all word beta in this sentence) * exp(digamma - digamma(sum))
-					double beta_sentence = 1.0;
-					for(int w = 0; w < doc_sent_word[doc_label][i].length; w ++){
-						int w_index = vocabulary.get(doc_sent_word[doc_label][i][w]);
-						beta_sentence = 1.0 * beta_sentence * topic_vocab_prob[j][w_index];
+		suffBETA = new double[Ntopic][vocabulary.size()];
+		for(int topic = 0; topic < Ntopic; topic ++ ){
+			for(int v = 0; v < vocabulary.size(); v ++){
+				suffBETA[topic][v] = 0;
+			}
+		}
+	}
+	
+	
+	public double runEstep(){
+		//Step 1: get total likelihood (sum of likelihood of all docs)
+		double tot_likelihood = 0;
+		for(int doc = 0; doc < Ndoc; doc ++){
+			//Step 1: Initial parameter
+			int Nsent = dsw[doc].length;
+			phi = this.initialPHI(Ntopic, Nsent);
+			gamma = this.initialGAMMA(Ntopic, Nsent);
+			
+			double oldlikelihood = 1;
+			double converged = 100;
+			int single_ite = 0;
+			
+			//Step 2: Get converged single likelihood
+			while((converged > conf.VAR_CONVERGED) && ((single_ite < conf.VAR_MAX_ITER) || (conf.VAR_MAX_ITER == -1))){
+				single_ite ++;
+				double[] gamma_component = new double[Ntopic];
+				double gamma_sum = 0;
+				for(int g = 0; g < gamma.length; g++){
+					gamma_sum = gamma_sum + gamma[g];
+				}
+				for(int g = 0; g < gamma.length; g ++){
+					gamma_component[g] = Gamma.digamma(gamma[g]) - Gamma.digamma(gamma_sum);
+				}
+				
+				double likelihood = this.single_inference(dsw[doc], gamma_component);
+				converged = 1.0 * Math.abs(likelihood - oldlikelihood)/oldlikelihood;
+				oldlikelihood = likelihood;
+			}
+			tot_likelihood = tot_likelihood + oldlikelihood;
+			
+			//gamma and phi are final paremeter (after convergence check).
+			//They are used to update parameters (alpha and beta)
+			//Step 3: Update sufficient parameters
+			//Update suff ALPHA
+			double gamma_sum = 0;
+			for(int topic = 0; topic < Ntopic; topic ++){
+				gamma_sum = gamma_sum + gamma[topic]; 
+				suffALPHA = suffALPHA + Gamma.digamma(gamma[topic]);
+			}
+			suffALPHA = suffALPHA - Ntopic * Gamma.digamma(gamma_sum);
+			
+			//Update suff Beta (in M step, beta needs to be normalized).
+			for(int sent = 0; sent < dsw[doc].length; sent ++){
+				for(int word = 0; word < dsw[doc][sent].length; word ++){
+					for(int topic = 0; topic < Ntopic; topic ++){
+						int vocab_index = vocabulary.get(dsw[doc][sent][word]);
+						suffBETA[topic][vocab_index] = suffBETA[topic][vocab_index] + phi[topic][sent];
 					}
-					
-					//final phi[][]
-					phi[j][i] = beta_sentence * Math.exp(digamma[j] - digamma_sum);					
-					phisum = phisum + phi[j][i];						
-				}		
-				
-				//Finish updating phi[][sentence] on all topics
-				//Normalize phi for sentence i
-				for(int j = 0; j < num_topic; j ++){
-					phi[j][i] = 1.0 * phi[j][i]/phisum;
-					phi_sent_sum[j] = phi_sent_sum[j] + phi[j][i];
-				}
-				
-			}
+				}			
+			}	
 			
-			//Update gamma
-			for(int i = 0; i < num_topic; i ++){			
-				var_gamma[i] = ALPHA + phi_sent_sum[i];
-			}			
-			
-			//Check convergence, whether continue while() loop
-			likelihood = compute_likelihood(doc_label, phi, var_gamma);
-			if(Double.isNaN(likelihood)){
-				likelihood = likelihood_old;
-				continue;
-			}
-			converged = 1.0* Math.abs((likelihood_old - likelihood)/likelihood_old);
-			likelihood_old = likelihood;
-			
-//			System.out.println("Doc: " + doc_label + " Iteration: " + var_iter + "  Converged: " + converged + " likelihood: " + likelihood);
-			
-		}
-		
-//		System.out.println("Doc: " + doc_label + " Iteration: " + var_iter + "  Converged: " + converged + " likelihood: " + likelihood);
-		//return the converged likelihood for one document.
-		return(likelihood);
-	}
-	
-	
-	private double single_doc_temp_alpha(double old_alpha){
-		double re_alpha = old_alpha;
-		double gamma_sum = 0;
-		
-		for(int i = 0; i < num_topic; i ++){
-			gamma_sum = gamma_sum + var_gamma[i];
-			re_alpha = re_alpha + Gamma.digamma(var_gamma[i]);					
-		}
-		re_alpha = re_alpha - num_topic * Gamma.digamma(gamma_sum);		
-		return(re_alpha);
-	}
-	
-	
-	private double[][] single_doc_temp_beta(double[][] temp_beta, int doc_label){
-		double[][] re_beta = temp_beta;
-		double[] sum = new double[num_topic];
-		
-		for(int i = 0; i < num_topic; i ++){
-			sum[i] = 0;
-					
-			//update re_beta and sum
-			for(int j = 0; j < doc_sent[doc_label]; j ++){
-				for(int w = 0; w < doc_sent_word[doc_label][j].length; w ++){
-					int w_index = vocabulary.get(doc_sent_word[doc_label][j][w]);
-					re_beta[i][w_index] = re_beta[i][w_index] + phi[i][j];
-					sum[i] = sum[i] + re_beta[i][w_index];
-				}
-			}			
-		}	
-		return(re_beta);
-	}
-
-	
-	private double[] initial_gamma (int doc_label){
-		double[] var_gamma = new double[num_topic];
-		for(int i = 0; i < num_topic; i ++){
-			var_gamma[i] = ALPHA + 1.0*doc_sent[doc_label]/num_topic;
-		}		
-		return(var_gamma);
-	}
-	
-	
-	//initial phi, var_gamma, digamma_gam for each inference
-	//Used in single_doc_inference
-	private double[][] initial_phi (int doc_label){
-		double[][] phi = new double[num_topic][doc_sent_word[doc_label].length];
-
-		int num_sentence = doc_sent[doc_label];		
-		for(int i = 0; i < num_topic; i ++){	
-			for(int j = 0; j < num_sentence; j ++){
-				phi[i][j] = 1.0/num_topic;
-			}
+			doc_gamma[doc] = gamma;
+			sent_phi[doc] = phi;
 		}	
 		
+		return(tot_likelihood);
+	}
+	
+	
+	public double[][] getsuffBETA(){
+		return(suffBETA);
+	}
+	
+	public double getsuffALPHA(){
+		return(suffALPHA);
+	}
+	
+	public double[][] getGAMMA(){
+		return(doc_gamma);
+	}
+	
+	public double[][][] getPHI(){
+		return(sent_phi);
+	}
+	
+	private double[][] initialPHI (int Ntopic, int Nsent){
+		//For one sentence, sum_phi = 1
+		//Initial phi evenly
+		double[][] phi = new double[Ntopic][Nsent];
+		for(int topic = 0; topic < Ntopic; topic ++){
+			for(int sent = 0; sent < Nsent; sent ++){
+				phi[topic][sent] = 1.0;
+			}
+		}
 		return(phi);
 	}
-
-		
-	//compute_likelihood from Blei(2003) and Bao(2014) format, adjusted for sent-LDA
-	private double compute_likelihood(int doc_label, double[][] phi, double[] var_gamma){
-		double likelihood = 0;
-		int num_sentence = doc_sent[doc_label];
-		double[] dig = new double[num_topic];
-		double digsum = 0;
-		double var_gamma_sum = 0;
-		
-		for(int i = 0 ; i < num_topic; i ++){
-			dig[i] = Gamma.digamma(var_gamma[i]);
-			var_gamma_sum = var_gamma_sum + var_gamma[i];
+	
+	private double[] initialGAMMA (int Ntopic, int Nsent){
+		double[] gamma = new double[Ntopic];
+		for(int topic = 0; topic < Ntopic; topic ++){
+			gamma[topic] = alpha + 1.0 * Nsent/Ntopic;
 		}
-		digsum = Gamma.digamma(var_gamma_sum);
-		
-		//Component 1
-		likelihood = Gamma.logGamma(ALPHA * num_topic)
-						- num_topic * Gamma.logGamma(ALPHA)
-						- Gamma.logGamma(var_gamma_sum);
-		
-		for(int i = 0 ; i < num_topic; i ++){
-			
-			//Component 2
-			likelihood = likelihood 
-							+ (ALPHA - 1) * (dig[i] - digsum)
-							+ Gamma.logGamma(var_gamma[i])
-							- (var_gamma[i] - 1)*(dig[i] - digsum);
-			
-			//Different of Sent-LDA compared with original
-			for(int j = 0 ; j < num_sentence; j ++){		
-				
-				if (phi[i][j] > 0){
-					//Component 3
-					likelihood = likelihood + phi[i][j] * (dig[i] - digsum)
-							+ phi[i][j] * Math.log(phi[i][j]);	
-					
-					for(int w = 0; w < doc_sent_word[doc_label][j].length; w ++){
-						int w_index = vocabulary.get(doc_sent_word[doc_label][j][w]);
-						//Component 4
-						likelihood = likelihood + Math.log(topic_vocab_prob[i][w_index]) * phi[i][j];
-					}
-				}
-			}
-		}	
-		return(likelihood);
+		return(gamma);
 	}
+	
+	private double single_inference(String[][] dsw_sent, double[] gamma_component){
+		double single_likelihood = 1;
+
+		for(int topic = 0; topic < Ntopic; topic ++){
+			gamma[topic] = alpha;
+		}
+		
+		
+		//Step 1: update phi;
+		for(int sent = 0; sent < dsw_sent.length; sent ++){
+			double phi_sum = 0;
+			for(int topic = 0; topic < Ntopic; topic ++){
+				for(int word = 0 ; word < dsw_sent[sent].length; word ++){
+					if(word == 0){
+						phi[topic][sent] = 1.0 * beta[topic][vocabulary.get(dsw_sent[sent][word])];
+					}else{
+						phi[topic][sent] = 1.0 * phi[topic][sent] * beta[topic][vocabulary.get(dsw_sent[sent][word])];
+					}
+					
+				}
+				phi[topic][sent] = phi[topic][sent] * Math.exp(gamma_component[topic]);
+				if(phi[topic][sent] == 0){
+					phi[topic][sent] = Math.pow(0.1, 200);
+				}
+				phi_sum = phi_sum + phi[topic][sent];
+				
+			}
+			
+			//Step 2: Normalize Ntopic phis on current sentence.
+			//        And update gamma;
+			
+			for(int topic = 0; topic < Ntopic; topic ++){
+				phi[topic][sent] = 1.0 * phi[topic][sent]/phi_sum;
+				gamma[topic] = gamma[topic] + phi[topic][sent];
+			}
+					
+		}
+		
+		single_likelihood = this.single_likelihood(dsw_sent);
+		return(single_likelihood);
+	}
+	
+	private double single_likelihood(String[][] dsw_sent){
+		//Part 1.
+		double result = Gamma.logGamma(alpha * Ntopic) + Ntopic * Gamma.gamma(alpha);
+		double gamma_sum = 0;
+		for(int topic = 0; topic < Ntopic; topic ++){
+			gamma_sum = gamma_sum + gamma[topic];
+		}
+		
+		//Part 2.
+		result = result + Gamma.logGamma(gamma_sum);
+		
+		for(int topic = 0; topic < Ntopic; topic ++){
+			//Part 2.
+			result = result + (alpha - 1) * (Gamma.digamma(gamma[topic]) - Gamma.digamma(gamma_sum))
+							+ Gamma.logGamma(gamma[topic])
+							+ (gamma[topic] - 1) * (Gamma.digamma(gamma[topic]) - Gamma.digamma(gamma_sum));
+			
+			//Part 3.
+			for(int sent = 0; sent < dsw_sent.length; sent ++){
+				double temp = 0;
+				for(int word = 0; word < dsw_sent[sent].length; word ++){
+					temp = temp + beta[topic][vocabulary.get(dsw_sent[sent][word])];
+				}
+				result = result 
+						+ phi[topic][sent] * (Gamma.digamma(gamma[topic]) - Gamma.digamma(gamma_sum))
+						+ phi[topic][sent] * temp
+						+ phi[topic][sent] * Math.log(phi[topic][sent]);
+			}
+		}
+		return(result);
+	}
+	
 	
 	
 }
+
+
+
+
+
+
+
