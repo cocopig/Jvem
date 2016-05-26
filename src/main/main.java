@@ -13,9 +13,9 @@ import coco.lda.conf.*;
 
 public class main {
 
-	public static void main(String [ ] args){
+	public static void main(String [ ] args) throws IOException{
 		
-		parameters par = new parameters();
+		parameters par = new parameters("", "");
 		
 		//Step 0: define parameter and initial parameters.
 		int Numdoc = 0, Numtopic = 30;
@@ -41,7 +41,7 @@ public class main {
 		String db_addr = par.db_addr;
 		String db_user = par.db_user;
 		String db_pwd = par.db_pwd;
-		String read_table = par.read_table;
+		String read_table = "SELECT * FROM ";
 		String wherecondition = " WHERE filing_date < '2015-01-01' and filing_date > '2014-01-01' and subtitle != ''";
 		
 		
